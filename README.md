@@ -55,5 +55,5 @@ AI is optional. Set `AI_API_KEY` (and `AI_API_URL`, `AI_MODEL`) in `server/.env`
 - The token is stored in `localStorage` for simplicity. For production, prefer httpOnly cookies.
 - Guideline patterns are admin-entered regular expressions. Only trust admins with this.
 
-## Deploy
-Build the client with `npm run build` in `client/` and host its `dist/` directory (set `VITE_API_URL` to the API URL). Run the server on Render and the database on MongoDB Atlas. Set `CLIENT_URL` on the server to the client's URL.
+## Deploy on Vercel
+Import this repository into Vercel with the repository root as the project root. The included `vercel.json` builds the Vite client into Vercel's static output and deploys the Express API as a function. Set `MONGODB_URI` to a MongoDB Atlas connection string and `JWT_SECRET` to a random secret of at least 16 characters in the Vercel project environment variables. `AI_API_KEY` is optional. Vercel hosts the website and API; MongoDB Atlas provides the database.
