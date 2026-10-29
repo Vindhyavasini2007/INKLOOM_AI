@@ -1,7 +1,9 @@
 import { cpSync, mkdirSync, rmSync, existsSync } from "node:fs";
 
-if (existsSync("public")) {
-  rmSync("public", { recursive: true, force: true });
+for (const dir of ["public", "dist"]) {
+  if (existsSync(dir)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  mkdirSync(dir, { recursive: true });
+  cpSync("client/dist", dir, { recursive: true });
 }
-mkdirSync("public", { recursive: true });
-cpSync("client/dist", "public", { recursive: true });
