@@ -1,12 +1,13 @@
 {
   "version": 2,
+  "outputDirectory": "public",
   "rewrites": [
     {
-      "source": "/api/(.*)",
+      "source": "/api/:path*",
       "destination": "/api/index.js"
     },
     {
-      "source": "/((?!api/|assets/|favicon\\.ico).*)",
+      "source": "/:path*",
       "destination": "/index.html"
     }
   ]
