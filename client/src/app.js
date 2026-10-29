@@ -63,16 +63,37 @@ async function api(path, options = {}) {
     ...options.headers,
   };
   let response;
+  let data;
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 20000);
   try {
     response = await fetch(`${API}${path}`, {
       ...options,
       headers,
+      signal: controller.signal,
       body: options.body && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body,
     });
-  } catch {
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.toLowerCase().includes("application/json")) {
+      const error = new Error(
+        `Inkloom's API route ${path} returned a web page instead of JSON (HTTP ${response.status}). Check the deployment's /api routing.`
+      );
+      error.name = "ApiResponseError";
+      throw error;
+    }
+    data = await response.json();
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("Inkloom's server took too long to respond. Please try again.");
+    }
+    if (error.name === "ApiResponseError") throw error;
+    if (error instanceof SyntaxError) {
+      throw new Error(`Inkloom's API route ${path} returned invalid JSON. Please try again or contact the workspace admin.`);
+    }
     throw new Error(`Could not connect to Inkloom's API at ${API}. Verify your server is running.`);
+  } finally {
+    window.clearTimeout(timeoutId);
   }
-  const data = await response.json().catch(() => ({}));
   if (response.status === 401 && state.token) {
     logout();
     throw new Error(data.error || "Your session expired. Please sign in again.");
@@ -427,6 +448,9 @@ function renderAuth(register = false) {
     button.innerHTML = '<span class="spinner"></span> Authenticating…';
     try {
       const result = await api(register ? "/auth/register" : "/auth/login", { method: "POST", body: form });
+      if (!result?.token || !result?.user?.id) {
+        throw new Error("Inkloom did not return a valid sign-in session. Check the API deployment and try again.");
+      }
       state.token = result.token;
       state.user = result.user;
       localStorage.setItem("inkloom_token", result.token);
@@ -845,11 +869,39 @@ function renderPage() {
 }
 
 async function loadApp() {
-  if (!state.user) state.user = (await api("/auth/me")).user;
-  const [content, analytics] = await Promise.all([api("/content"), api("/analytics/overview")]);
-  state.content = content;
-  state.analytics = analytics;
+  if (!state.user) {
+    const session = await api("/auth/me");
+    if (!session?.user?.id) throw new Error("Inkloom could not verify your workspace session. Please sign in again.");
+    state.user = session.user;
+  }
+  const [contentResult, analyticsResult] = await Promise.allSettled([
+    api("/content"),
+    api("/analytics/overview"),
+  ]);
+
+  // An expired session can log the user out while either request is in flight.
+  if (!state.token || !state.user) {
+    throw new Error("Inkloom could not verify your workspace session. Please sign in again.");
+  }
+
+  const failedSections = [];
+  if (contentResult.status === "fulfilled") {
+    state.content = contentResult.value;
+  } else {
+    state.content = [];
+    failedSections.push("content");
+  }
+  if (analyticsResult.status === "fulfilled") {
+    state.analytics = analyticsResult.value;
+  } else {
+    state.analytics = null;
+    failedSections.push("analytics");
+  }
+
   renderPage();
+  if (failedSections.length) {
+    toast("Your workspace opened, but some dashboard data could not load. Refresh to try again.", "error");
+  }
 }
 
 async function openDetail(id) {
