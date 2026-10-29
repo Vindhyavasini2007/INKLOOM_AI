@@ -1,7 +1,18 @@
 import "./styles.css";
 import { mountLandingEffects } from "./specularButton.js";
 
-const API = (import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "http://localhost:5000/api" : "/api")).replace(/\/$/, "");
+const getApiBase = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (typeof window !== "undefined") {
+    const isLocalhost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+    if (!isLocalhost && envUrl && (envUrl.includes("localhost") || envUrl.includes("127.0.0.1"))) {
+      return "/api";
+    }
+  }
+  if (envUrl) return envUrl;
+  return import.meta.env.DEV ? "http://localhost:5000/api" : "/api";
+};
+const API = getApiBase().replace(/\/$/, "");
 const app = document.querySelector("#app");
 let cleanupSpecularButtons = null;
 
@@ -21,7 +32,7 @@ const escapeHtml = (value = "") =>
   String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 
 const initials = (name = "Inkloom") =>
-  name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+  (name || "Inkloom").trim().split(/\s+/).slice(0, 2).map((part) => part[0] || "").join("").toUpperCase() || "I";
 
 const date = (value) =>
   value ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value)) : "—";
@@ -453,6 +464,7 @@ function renderAuth(register = false) {
       }
       state.token = result.token;
       state.user = result.user;
+      state.page = "overview";
       localStorage.setItem("inkloom_token", result.token);
       await loadApp();
     } catch (error) {
@@ -869,6 +881,10 @@ function renderPage() {
 }
 
 async function loadApp() {
+  if (!state.token) {
+    renderLanding();
+    return;
+  }
   if (!state.user) {
     const session = await api("/auth/me");
     if (!session?.user?.id) throw new Error("Inkloom could not verify your workspace session. Please sign in again.");
@@ -885,13 +901,13 @@ async function loadApp() {
   }
 
   const failedSections = [];
-  if (contentResult.status === "fulfilled") {
+  if (contentResult.status === "fulfilled" && Array.isArray(contentResult.value)) {
     state.content = contentResult.value;
   } else {
     state.content = [];
     failedSections.push("content");
   }
-  if (analyticsResult.status === "fulfilled") {
+  if (analyticsResult.status === "fulfilled" && analyticsResult.value) {
     state.analytics = analyticsResult.value;
   } else {
     state.analytics = null;
@@ -900,7 +916,7 @@ async function loadApp() {
 
   renderPage();
   if (failedSections.length) {
-    toast("Your workspace opened, but some dashboard data could not load. Refresh to try again.", "error");
+    toast("Your workspace opened, but some dashboard data could not load. Refresh to try again.", "info");
   }
 }
 
@@ -1379,9 +1395,16 @@ document.addEventListener("click", async (event) => {
 
   if (target.matches("[data-demo]")) {
     const email = { admin: "admin@demo.test", creator: "creator@demo.test", reviewer: "reviewer@demo.test" }[target.dataset.demo];
-    document.querySelector("#auth-form [name=email]").value = email;
-    document.querySelector("#auth-form [name=password]").value = "Passw0rd!demo";
-    document.querySelector("#auth-form").requestSubmit();
+    if (document.querySelector("#auth-form [name=organisationName]")) {
+      renderAuth(false);
+    }
+    const emailInput = document.querySelector("#auth-form [name=email]");
+    const passInput = document.querySelector("#auth-form [name=password]");
+    if (emailInput && passInput) {
+      emailInput.value = email;
+      passInput.value = "Passw0rd!demo";
+      document.querySelector("#auth-form")?.requestSubmit();
+    }
     return;
   }
 

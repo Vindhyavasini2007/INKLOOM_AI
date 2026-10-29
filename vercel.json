@@ -1,27 +1,13 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "services": {
-    "server": {
-      "root": "server",
-      "framework": "express"
-    },
-    "client": {
-      "root": "client",
-      "framework": "vite"
-    }
-  },
+  "version": 2,
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": {
-        "service": "server"
-      }
+      "destination": "/api/index.js"
     },
     {
-      "source": "/(.*)",
-      "destination": {
-        "service": "client"
-      }
+      "source": "/((?!api/|assets/|favicon\\.ico).*)",
+      "destination": "/index.html"
     }
   ]
 }

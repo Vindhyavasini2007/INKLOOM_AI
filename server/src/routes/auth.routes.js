@@ -11,7 +11,14 @@ import { audit } from "../services/auditService.js";
 const r = Router();
 r.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 60 }));
 const sign = (u) => jwt.sign({ id: u._id }, process.env.JWT_SECRET, { expiresIn: "8h" });
-export const publicUser = (u) => ({ id: String(u._id), name: u.name, email: u.email, role: u.role, organisationId: String(u.organisationId) });
+export const publicUser = (u, orgName = "") => ({
+  id: String(u._id),
+  name: u.name,
+  email: u.email,
+  role: u.role,
+  organisationId: String(u.organisationId),
+  organisationName: orgName || u.organisationName || "",
+});
 
 r.post("/register", wrap(async (req, res) => {
   const b = z.object({
@@ -24,15 +31,19 @@ r.post("/register", wrap(async (req, res) => {
     name: b.name, email: b.email, passwordHash: await bcrypt.hash(b.password, 10), organisationId: org._id, role: "admin",
   });
   await audit(user, "org.created", org._id, { name: org.name });
-  res.status(201).json({ token: sign(user), user: publicUser(user) });
+  res.status(201).json({ token: sign(user), user: publicUser(user, org.name) });
 }));
 
 r.post("/login", wrap(async (req, res) => {
   const b = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(req.body);
   const user = await User.findOne({ email: b.email.toLowerCase() });
   if (!user || !(await bcrypt.compare(b.password, user.passwordHash))) throw httpError(401, "Wrong email or password");
-  res.json({ token: sign(user), user: publicUser(user) });
+  const org = await Organization.findById(user.organisationId).lean();
+  res.json({ token: sign(user), user: publicUser(user, org?.name) });
 }));
 
-r.get("/me", auth, (req, res) => res.json({ user: publicUser(req.user) }));
+r.get("/me", auth, wrap(async (req, res) => {
+  const org = await Organization.findById(req.user.organisationId).lean();
+  res.json({ user: publicUser(req.user, org?.name) });
+}));
 export default r;
